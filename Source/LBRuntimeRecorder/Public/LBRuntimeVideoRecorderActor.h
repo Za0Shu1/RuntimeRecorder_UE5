@@ -7,69 +7,110 @@
 #include "LBRFFmpegEncodeThread.h"
 #include "LBRuntimeVideoRecorderActor.generated.h"
 
+DECLARE_LOG_CATEGORY_EXTERN(LogLBRuntimeVideoRecorder, Log, All);
+
 class FLBRSimpleAsyncCapture
 {
 public:
-    static void CaptureAsync(
-        UTextureRenderTarget2D* RenderTarget,
-        float InGamma,
-        float InExposure,
-        TFunction<void(const TArray<FColor>&, int32, int32)> Callback);
-    
+	static void CaptureAsync(
+		UTextureRenderTarget2D* RenderTarget,
+		float InGamma,
+		float InExposure,
+		TFunction<void(const TArray<FColor>&, int32, int32)> Callback);
+
+};
+
+UENUM(BlueprintType)
+enum class ELBRVideoResolution : uint8
+{
+	Resolution_360p      UMETA(DisplayName = "360p (640x360)"),
+	Resolution_480p      UMETA(DisplayName = "480p (854x480)"),
+	Resolution_720pHD    UMETA(DisplayName = "720p HD (1280x720)"),
+	Resolution_1080pFullHD UMETA(DisplayName = "1080p Full HD (1920x1080)"),
+	Resolution_1440p2K   UMETA(DisplayName = "1440p 2K (2560x1440)")
 };
 
 UCLASS()
 class LBRUNTIMERECORDER_API ALBRuntimeVideoRecorderActor : public AActor
 {
 	GENERATED_BODY()
-	
+
 public:
-    ALBRuntimeVideoRecorderActor();
+	ALBRuntimeVideoRecorderActor();
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
-    USceneCaptureComponent2D* CaptureComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
+	USceneCaptureComponent2D* CaptureComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
-    UTextureRenderTarget2D* RenderTarget;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
+	UTextureRenderTarget2D* RenderTarget;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
-    int32 VideoWidth = 1920;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "分辨率"))
+	ELBRVideoResolution VideoResolution = ELBRVideoResolution::Resolution_1080pFullHD;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
-    int32 VideoHeight = 1080;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "Gamma", ClampMin = "0.1", ClampMax = "5.0"))
+	float Gamma = 1.2f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
-    float Gamma = 2.2f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "曝光补偿", ClampMin = "0.1", ClampMax = "5.0"))
+	float Exposure = 1.3f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
-    float Exposure = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "帧率", ClampMin = "1", ClampMax = "120"))
+	float CaptureFPS = 30.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
-    float CaptureFPS = 30.f;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif // WITH_EDITOR
+	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder | Video Recorder")
+	void StartRecording(const FString& FileName = "Output");
 
-    virtual void OnConstruction(const FTransform& Transform) override;
-    virtual void BeginPlay() override;
-    virtual void Tick(float DeltaTime) override;
-    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder | Video Recorder")
+	void StopRecording();
 
-	UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder")
-	void CaptureOneFrame();
+	UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder| Scene Shot")
+	void SceneShot(const FString& FileName = "SceneShot");
 
-    UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder")
-	void CaptureOneFrameAsync();
+	UFUNCTION(BlueprintPure, BlueprintCallable, Category = "LBRuntimeVideoRecorder| Utils")
+	FString GetDateString(FString Format = "%Y.%m.%d-%H.%M.%S");
 
-    UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder")
-    void StartRecording();
+	UFUNCTION(BlueprintNativeEvent, Category = "LBRuntimeVideoRecorder| Scene Shot")
+	FString GetSceneShotStoragePath();
+	FString GetSceneShotStoragePath_Implementation()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("RuntimeRecorder"), GetDateString("%Y%m%d"), TEXT("SceneShot"));
+	}
 
-    UFUNCTION(BlueprintCallable, Category = "LBRuntimeVideoRecorder")
-    void StopRecording();
+	UFUNCTION(BlueprintNativeEvent, Category = "LBRuntimeVideoRecorder| Scene Shot")
+	FString GetVideoStoragePath();
+	FString GetVideoStoragePath_Implementation()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("RuntimeRecorder"), GetDateString("%Y%m%d"), TEXT("Video"));
+	}
+protected:
 
 private:
+	// 当前实际的宽度和高度（从分辨率枚举派生）
+	int32 CurrentWidth = 1920;
+	int32 CurrentHeight = 1080;
+
 	bool bIsRecording = false;
 	float TimeAccumulator = 0.f;
-    float FrameInterval = 1.f / 30.f;
+	float FrameInterval = 1.f / 30.f;
+	int64 FrameCounter = 0;
+
+	// Encode 线程对象（逻辑）
+	FLBRFFmpegEncodeThread* EncodeThread = nullptr;
+
+	// UE 线程包装
+	FRunnableThread* EncodeRunnable = nullptr;
 
 private:
-    void InitRenderTarget();
+	// 获取指定分辨率对应的宽高
+	FIntPoint GetResolutionFromEnum(ELBRVideoResolution Resolution) const;
+
+	void InitRenderTarget();
+	void CaptureFrameAsync();
 };

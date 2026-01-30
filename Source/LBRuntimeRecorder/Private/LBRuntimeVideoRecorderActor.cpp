@@ -3,10 +3,12 @@
 #include "LBRuntimeVideoRecorderActor.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
-#include "LBRRSceneShotCapture.h"
 #include "RenderGraphBuilder.h"
 #include "RHIGPUReadback.h"
 #include "RenderGraphUtils.h"
+#include <ImageUtils.h>
+
+DEFINE_LOG_CATEGORY(LogLBRuntimeVideoRecorder);
 
 ALBRuntimeVideoRecorderActor::ALBRuntimeVideoRecorderActor()
 {
@@ -19,8 +21,8 @@ ALBRuntimeVideoRecorderActor::ALBRuntimeVideoRecorderActor()
 	CaptureComponent->bCaptureEveryFrame = true;
 	CaptureComponent->bCaptureOnMovement = true;
 
-	// 设置CaptureSource为HDR模式
-	CaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	// 设置CaptureSource为HDR模式 (保留更多暗部细节)
+	CaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalToneCurveHDR;
 
 	// 优化后处理设置，保留暗部细节
 	CaptureComponent->PostProcessSettings.bOverride_AutoExposureMethod = true;
@@ -34,6 +36,12 @@ ALBRuntimeVideoRecorderActor::ALBRuntimeVideoRecorderActor()
 void ALBRuntimeVideoRecorderActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+
+	// 更新当前分辨率
+	FIntPoint Resolution = GetResolutionFromEnum(VideoResolution);
+	CurrentWidth = Resolution.X;
+	CurrentHeight = Resolution.Y;
+
 	InitRenderTarget();
 }
 
@@ -41,7 +49,34 @@ void ALBRuntimeVideoRecorderActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 更新当前分辨率
+	FIntPoint Resolution = GetResolutionFromEnum(VideoResolution);
+	CurrentWidth = Resolution.X;
+	CurrentHeight = Resolution.Y;
+
+	InitRenderTarget();
 }
+
+#if WITH_EDITOR
+void ALBRuntimeVideoRecorderActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
+		? PropertyChangedEvent.Property->GetFName()
+		: NAME_None;
+
+	// 当分辨率属性变化时，更新RenderTarget
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(ALBRuntimeVideoRecorderActor, VideoResolution))
+	{
+		FIntPoint Resolution = GetResolutionFromEnum(VideoResolution);
+		CurrentWidth = Resolution.X;
+		CurrentHeight = Resolution.Y;
+
+		InitRenderTarget();
+	}
+}
+#endif
 
 void ALBRuntimeVideoRecorderActor::Tick(float DeltaTime)
 {
@@ -55,7 +90,7 @@ void ALBRuntimeVideoRecorderActor::Tick(float DeltaTime)
 
 	while (TimeAccumulator >= FrameInterval)
 	{
-		CaptureOneFrameAsync();
+		CaptureFrameAsync();
 
 		TimeAccumulator -= FrameInterval;
 	}
@@ -66,64 +101,41 @@ void ALBRuntimeVideoRecorderActor::EndPlay(const EEndPlayReason::Type EndPlayRea
 	Super::EndPlay(EndPlayReason);
 }
 
-void ALBRuntimeVideoRecorderActor::CaptureOneFrame()
-{
-	const FString FilePath = FPaths::ProjectSavedDir() / TEXT("RuntimeRecorder") / TEXT("VideoCapture") /
-		FString::Printf(TEXT("Frame_%s.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%f")));
-
-	LBRRSceneShotCapture::GetPixelsFromRenderTarget(
-		RenderTarget,
-		[this, FilePath](const TArray<FColor>& Pixels, int32 Width, int32 Height)
-		{
-			// 捕获完成回调，保存为PNG
-			LBRRSceneShotCapture::SavePixelsToPNG(Pixels, Width, Height, FilePath);
-		},
-		Gamma,
-		Exposure
-	);
-}
-
-void ALBRuntimeVideoRecorderActor::CaptureOneFrameAsync()
-{
-	/*const FString FilePath = FPaths::ProjectSavedDir() / TEXT("RuntimeRecorder") / TEXT("VideoCapture") /
-		FString::Printf(TEXT("Frame_%s.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%f")));*/
-
-	const FString FilePath =
-		FPaths::ProjectSavedDir() / TEXT("RuntimeRecorder") / TEXT("VideoCapture") /
-		FString::Printf(TEXT("Frame_%lld.png"), FDateTime::Now().GetTicks());
-
-	// 最简单的调用
-	FLBRSimpleAsyncCapture::CaptureAsync(
-		RenderTarget,
-		Gamma,
-		Exposure,
-		[FilePath](const TArray<FColor>& Pixels, int32 Width, int32 Height)
-		{
-			// 保存PNG
-			UE_LOG(LogTemp, Log, TEXT("SavePixelsToPNG"));
-			LBRRSceneShotCapture::SavePixelsToPNG(Pixels, Width, Height, FilePath);
-		}
-	);
-}
-
-void ALBRuntimeVideoRecorderActor::StartRecording()
+void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 {
 	if (bIsRecording) return;
 
 	bIsRecording = true;
 	FrameInterval = 1.f / CaptureFPS;
 
-	const FString SaveDir = FPaths::ProjectSavedDir() / TEXT("RuntimeRecorder/VideoCapture");
+	const FString SaveDir = GetVideoStoragePath();
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PlatformFile.DirectoryExists(*SaveDir))
 	{
 		PlatformFile.CreateDirectoryTree(*SaveDir);
 	}
 
-	const FString FilePath = SaveDir / TEXT("Record.mp4");
+	FString FilePath = FPaths::Combine(SaveDir, FileName + TEXT(".mp4"));
+
+
+	EncodeThread = new FLBRFFmpegEncodeThread(
+		CurrentWidth,
+		CurrentHeight,
+		CaptureFPS,
+		FilePath
+	);
+
+	EncodeRunnable = FRunnableThread::Create(
+		EncodeThread,
+		TEXT("LBR_FFmpegEncodeThread"),
+		0,
+		TPri_AboveNormal
+	);
 
 	bIsRecording = true;
 	TimeAccumulator = 0.f;
+
+	UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Start recording at resolution %dx%d,Gamma[%f],Exposure[%f]"), CurrentWidth, CurrentHeight, Gamma, Exposure);
 }
 
 void ALBRuntimeVideoRecorderActor::StopRecording()
@@ -131,22 +143,104 @@ void ALBRuntimeVideoRecorderActor::StopRecording()
 	if (!bIsRecording) return;
 
 	bIsRecording = false;
+
+	if (!EncodeRunnable || !EncodeThread)
+		return;
+
+	// 通知线程停止（会 Flush）
+	EncodeThread->StopRecording();
+
+	// 等待 Run() 完成
+	EncodeRunnable->WaitForCompletion();
+
+	delete EncodeRunnable;
+	EncodeRunnable = nullptr;
+
+	delete EncodeThread;
+	EncodeThread = nullptr;
+}
+
+void ALBRuntimeVideoRecorderActor::SceneShot(const FString& FileName)
+{
+	FLBRSimpleAsyncCapture::CaptureAsync(
+		RenderTarget,
+		Gamma,
+		Exposure,
+		[this, FileName](const TArray<FColor>& Pixels, int32 Width, int32 Height)
+		{
+			if (Pixels.Num() == 0 || Width <= 0 || Height <= 0)
+				return;
+
+			FString FilePath = FPaths::Combine(GetSceneShotStoragePath(), FileName + TEXT(".png"));
+
+			Async(EAsyncExecution::ThreadPool, [Pixels, Width, Height, FilePath]()
+				{
+					TArray64<uint8> PNGData;
+					FImageUtils::PNGCompressImageArray(Width, Height, Pixels, PNGData);
+
+					IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
+					FFileHelper::SaveArrayToFile(PNGData, *FilePath);
+				});
+		}
+	);
+}
+
+FString ALBRuntimeVideoRecorderActor::GetDateString(FString Format)
+{
+	return FDateTime::Now().ToString(*Format);
+}
+
+FIntPoint ALBRuntimeVideoRecorderActor::GetResolutionFromEnum(ELBRVideoResolution Resolution) const
+{
+	switch (Resolution)
+	{
+	case ELBRVideoResolution::Resolution_360p:
+		return FIntPoint(640, 360);
+	case ELBRVideoResolution::Resolution_480p:
+		return FIntPoint(854, 480);
+	case ELBRVideoResolution::Resolution_720pHD:
+		return FIntPoint(1280, 720);
+	case ELBRVideoResolution::Resolution_1080pFullHD:
+		return FIntPoint(1920, 1080);
+	case ELBRVideoResolution::Resolution_1440p2K:
+		return FIntPoint(2560, 1440);
+	default:
+		return FIntPoint(1920, 1080);
+	}
 }
 
 void ALBRuntimeVideoRecorderActor::InitRenderTarget()
 {
 	if (!RenderTarget)
 	{
-		RenderTarget = NewObject<UTextureRenderTarget2D>(this, UTextureRenderTarget2D::StaticClass(), TEXT("VideoRenderTarget"));
+		RenderTarget = NewObject<UTextureRenderTarget2D>(
+			this,
+			UTextureRenderTarget2D::StaticClass(),
+			TEXT("VideoRenderTarget")
+		);
+
 		RenderTarget->RenderTargetFormat = RTF_RGBA8;
 		RenderTarget->bAutoGenerateMips = false;
 		RenderTarget->Filter = TF_Bilinear;
 		RenderTarget->ClearColor = FLinearColor::Black;
-		RenderTarget->InitAutoFormat(VideoWidth, VideoHeight);
+		RenderTarget->bGPUSharedFlag = false;
+	}
+
+	// 检查是否需要调整尺寸
+	const bool bNeedResize = RenderTarget->SizeX != CurrentWidth ||
+		RenderTarget->SizeY != CurrentHeight;
+
+	if (bNeedResize)
+	{
+		// 重新初始化RenderTarget
+		RenderTarget->ReleaseResource();
+		RenderTarget->InitCustomFormat(CurrentWidth, CurrentHeight, PF_B8G8R8A8, false);
+		UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Init render target format %dx%d"), CurrentWidth, CurrentHeight);
 		RenderTarget->UpdateResourceImmediate(true);
 	}
 
-	if (CaptureComponent)
+	// 确保CaptureComponent使用正确的RenderTarget
+	if (CaptureComponent && CaptureComponent->TextureTarget != RenderTarget)
 	{
 		CaptureComponent->TextureTarget = RenderTarget;
 	}
@@ -200,14 +294,14 @@ void FLBRSimpleAsyncCapture::CaptureAsync(
 					if (!Data)
 					{
 						Readback->Unlock();
-						UE_LOG(LogTemp, Error, TEXT("Failed to lock readback data"));
+						UE_LOG(LogLBRuntimeVideoRecorder, Error, TEXT("Failed to lock readback data"));
 						return;
 					}
 
 					// 验证尺寸
 					if (Width != TextureSize.X || Height != TextureSize.Y)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("Size mismatch: Expected %dx%d, Got %dx%d"),
+						UE_LOG(LogLBRuntimeVideoRecorder, Warning, TEXT("Size mismatch: Expected %dx%d, Got %dx%d"),
 							TextureSize.X, TextureSize.Y, Width, Height);
 					}
 
@@ -220,11 +314,9 @@ void FLBRSimpleAsyncCapture::CaptureAsync(
 
 
 					// 调试输出
-					if (Pixels.Num() > 0)
+					if (Pixels.Num() == 0)
 					{
-						FColor FirstPixel = Pixels[0];
-						UE_LOG(LogTemp, Log, TEXT("Async capture result: R=%d G=%d B=%d A=%d"),
-							FirstPixel.R, FirstPixel.G, FirstPixel.B, FirstPixel.A);
+						UE_LOG(LogLBRuntimeVideoRecorder, Warning, TEXT("Readback empty Pixels."));
 					}
 
 					// 转到后台线程处理 Gamma/Exposure  (这里捕获Pixels是const,所以加mutable)
@@ -255,7 +347,6 @@ void FLBRSimpleAsyncCapture::CaptureAsync(
 							// 最后回调到游戏线程
 							AsyncTask(ENamedThreads::GameThread, [Pixels = MoveTemp(Pixels), Width, Height, Callback]()
 								{
-									UE_LOG(LogTemp, Log, TEXT("Callback"));
 									Callback(Pixels, Width, Height);
 								});
 						});
@@ -264,4 +355,28 @@ void FLBRSimpleAsyncCapture::CaptureAsync(
 			AsyncTask(ENamedThreads::ActualRenderingThread,
 				[Poll]() { Poll(Poll); });
 		});
+}
+
+void ALBRuntimeVideoRecorderActor::CaptureFrameAsync()
+{
+	FLBRSimpleAsyncCapture::CaptureAsync(
+		RenderTarget,
+		Gamma,
+		Exposure,
+		[this](const TArray<FColor>& Pixels, int32 Width, int32 Height)
+		{
+			FLBRRawFrame Frame;
+			Frame.Width = Width;
+			Frame.Height = Height;
+			Frame.PTS = FrameCounter++;
+			Frame.Pixels = Pixels; // TArray<FColor> 拷贝
+
+
+			if (EncodeThread)
+			{
+				UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Encode frame index [%lld]"), FrameCounter);
+				EncodeThread->PushFrame(MoveTemp(Frame));
+			}
+		}
+	);
 }

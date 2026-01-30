@@ -13,9 +13,6 @@ public class LBRuntimeRecorder : ModuleRules
         string ThirdPartyPath = Path.GetFullPath(Path.Combine(ModuleDirectory, "./ThirdParty"));
         string FFmpegPath = Path.Combine(ThirdPartyPath, "ffmpeg");
 
-        Console.WriteLine("==== ffmpeg thirdparty path : {0} =====", FFmpegPath);
-
-
         PublicIncludePaths.Add(Path.Combine(FFmpegPath, "include"));
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
@@ -32,11 +29,22 @@ public class LBRuntimeRecorder : ModuleRules
 
 
             // ‘À–– ±DLL
-            RuntimeDependencies.Add("$(TargetOutputDir)/avcodec-62.dll", Path.Combine(BinPath, "avcodec-62.dll"));
-            RuntimeDependencies.Add("$(TargetOutputDir)/avformat-62.dll", Path.Combine(BinPath, "avformat-62.dll"));
-            RuntimeDependencies.Add("$(TargetOutputDir)/avutil-60.dll", Path.Combine(BinPath, "avutil-60.dll"));
-            RuntimeDependencies.Add("$(TargetOutputDir)/swscale-9.dll", Path.Combine(BinPath, "swscale-9.dll"));
-            RuntimeDependencies.Add("$(TargetOutputDir)/swresample-6.dll", Path.Combine(BinPath, "swresample-6.dll"));
+            string[] DynamicLibraries = Directory.GetFiles(BinPath, "*.dll");
+
+            foreach (string item in DynamicLibraries)
+            {
+
+                string DynamicLibraryName = Path.GetFileName(item);
+                System.Console.WriteLine(item);
+
+                RuntimeDependencies.Add(Path.Combine("$(BinaryOutputDir)", DynamicLibraryName), item);
+            }
+
+            //RuntimeDependencies.Add("$(TargetOutputDir)/avcodec-62.dll", Path.Combine(BinPath, "avcodec-62.dll"), StagedFileType.NonUFS);
+            //RuntimeDependencies.Add("$(TargetOutputDir)/avformat-62.dll", Path.Combine(BinPath, "avformat-62.dll"), StagedFileType.NonUFS);
+            //RuntimeDependencies.Add("$(TargetOutputDir)/avutil-60.dll", Path.Combine(BinPath, "avutil-60.dll"), StagedFileType.NonUFS);
+            //RuntimeDependencies.Add("$(TargetOutputDir)/swscale-9.dll", Path.Combine(BinPath, "swscale-9.dll"),StagedFileType.NonUFS);
+            //RuntimeDependencies.Add("$(TargetOutputDir)/swresample-6.dll", Path.Combine(BinPath, "swresample-6.dll"), StagedFileType.NonUFS);
         }
 
 
