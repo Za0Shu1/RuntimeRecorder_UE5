@@ -39,12 +39,6 @@ public class LBRuntimeRecorder : ModuleRules
 
                 RuntimeDependencies.Add(Path.Combine("$(BinaryOutputDir)", DynamicLibraryName), item);
             }
-
-            //RuntimeDependencies.Add("$(TargetOutputDir)/avcodec-62.dll", Path.Combine(BinPath, "avcodec-62.dll"), StagedFileType.NonUFS);
-            //RuntimeDependencies.Add("$(TargetOutputDir)/avformat-62.dll", Path.Combine(BinPath, "avformat-62.dll"), StagedFileType.NonUFS);
-            //RuntimeDependencies.Add("$(TargetOutputDir)/avutil-60.dll", Path.Combine(BinPath, "avutil-60.dll"), StagedFileType.NonUFS);
-            //RuntimeDependencies.Add("$(TargetOutputDir)/swscale-9.dll", Path.Combine(BinPath, "swscale-9.dll"),StagedFileType.NonUFS);
-            //RuntimeDependencies.Add("$(TargetOutputDir)/swresample-6.dll", Path.Combine(BinPath, "swresample-6.dll"), StagedFileType.NonUFS);
         }
 
 
@@ -67,6 +61,7 @@ public class LBRuntimeRecorder : ModuleRules
                 "RenderCore",
                 "RHI",
                 "Renderer",
+                "AudioMixer"
 				// ... add private dependencies that you statically link with here ...	
 			}
             );

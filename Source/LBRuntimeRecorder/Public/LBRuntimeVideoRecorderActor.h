@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "LBRFFmpegEncodeThread.h"
 #include "LBRTypes.h"
+#include "LBSubmixCapture.h"
 #include "LBRuntimeVideoRecorderActor.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogLBRuntimeVideoRecorder, Log, All);
@@ -88,6 +89,8 @@ private:
 	// UE 线程包装
 	FRunnableThread* EncodeRunnable = nullptr;
 
+	// 音频捕获
+	TSharedPtr<LBSubmixCapture> AudioCapture;
 private:
 	// 获取指定分辨率对应的宽高
 	FIntPoint GetResolutionFromEnum(ELBRVideoResolution Resolution) const;

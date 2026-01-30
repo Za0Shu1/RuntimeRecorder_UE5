@@ -22,10 +22,18 @@ enum class ELBRVideoResolution : uint8
 
 struct FLBRRawFrame
 {
-	TArray<FColor> Pixels;   // UE ReadPixels �õ��� FColor
+	TArray<FColor> Pixels;   // UE ReadPixels 得到的 FColor
 	int32 Width = 0;
 	int32 Height = 0;
 	int64 PTS = 0;
+};
+
+struct FLBRAudioFrame
+{
+	TArray<float> Samples;   // interleaved
+	int32 NumChannels;
+	int32 SampleRate;
+	int64 PTS;               // 样本级时间戳
 };
 
 UCLASS()

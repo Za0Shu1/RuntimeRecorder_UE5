@@ -99,6 +99,7 @@ void ALBRuntimeVideoRecorderActor::Tick(float DeltaTime)
 void ALBRuntimeVideoRecorderActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+	StopRecording();
 }
 
 void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
@@ -132,6 +133,19 @@ void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 		TPri_AboveNormal
 	);
 
+	// 开始录制音频
+	AudioCapture = MakeShared<LBSubmixCapture>();
+	AudioCapture->OnAudioFrame.BindLambda(
+		[this](FLBRAudioFrame&& AudioFrame)
+		{
+			if (EncodeThread)
+			{
+				EncodeThread->PushAudioFrame(MoveTemp(AudioFrame));
+			}
+		}
+	);
+	AudioCapture->Initialize();
+
 	bIsRecording = true;
 	TimeAccumulator = 0.f;
 
@@ -146,6 +160,12 @@ void ALBRuntimeVideoRecorderActor::StopRecording()
 
 	if (!EncodeRunnable || !EncodeThread)
 		return;
+
+	if (AudioCapture.IsValid())
+	{
+		AudioCapture->Uninitialize();
+		AudioCapture.Reset();
+	}
 
 	// 通知线程停止（会 Flush）
 	EncodeThread->StopRecording();
