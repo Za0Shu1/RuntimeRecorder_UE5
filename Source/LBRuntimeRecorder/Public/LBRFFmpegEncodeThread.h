@@ -4,6 +4,7 @@
 #include "HAL/Runnable.h"
 #include "HAL/ThreadSafeBool.h"
 #include "Containers/Queue.h"
+#include "LBRTypes.h"
 
 extern "C"
 {
@@ -14,14 +15,6 @@ extern "C"
 }
 
 DECLARE_LOG_CATEGORY_EXTERN(LogFFmpegEncodeThread, Log, All);
-
-struct FLBRRawFrame
-{
-    TArray<FColor> Pixels;   // UE ReadPixels µÃµ½µÄ FColor
-    int32 Width = 0;
-    int32 Height = 0;
-    int64 PTS = 0;
-};
 
 class LBRUNTIMERECORDER_API FLBRFFmpegEncodeThread : public FRunnable
 {

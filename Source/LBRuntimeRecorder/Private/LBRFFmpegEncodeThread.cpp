@@ -4,7 +4,6 @@
 
 DEFINE_LOG_CATEGORY(LogFFmpegEncodeThread);
 
-// 构造函数：提前初始化 FrameEvent
 FLBRFFmpegEncodeThread::FLBRFFmpegEncodeThread(
     int32 InWidth,
     int32 InHeight,

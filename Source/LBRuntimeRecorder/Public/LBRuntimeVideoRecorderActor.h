@@ -5,30 +5,10 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "LBRFFmpegEncodeThread.h"
+#include "LBRTypes.h"
 #include "LBRuntimeVideoRecorderActor.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogLBRuntimeVideoRecorder, Log, All);
-
-class FLBRSimpleAsyncCapture
-{
-public:
-	static void CaptureAsync(
-		UTextureRenderTarget2D* RenderTarget,
-		float InGamma,
-		float InExposure,
-		TFunction<void(const TArray<FColor>&, int32, int32)> Callback);
-
-};
-
-UENUM(BlueprintType)
-enum class ELBRVideoResolution : uint8
-{
-	Resolution_360p      UMETA(DisplayName = "360p (640x360)"),
-	Resolution_480p      UMETA(DisplayName = "480p (854x480)"),
-	Resolution_720pHD    UMETA(DisplayName = "720p HD (1280x720)"),
-	Resolution_1080pFullHD UMETA(DisplayName = "1080p Full HD (1920x1080)"),
-	Resolution_1440p2K   UMETA(DisplayName = "1440p 2K (2560x1440)")
-};
 
 UCLASS()
 class LBRUNTIMERECORDER_API ALBRuntimeVideoRecorderActor : public AActor
@@ -100,6 +80,7 @@ private:
 	float TimeAccumulator = 0.f;
 	float FrameInterval = 1.f / 30.f;
 	int64 FrameCounter = 0;
+	FString CurrentVideoFilePath;
 
 	// Encode 线程对象（逻辑）
 	FLBRFFmpegEncodeThread* EncodeThread = nullptr;
@@ -113,4 +94,9 @@ private:
 
 	void InitRenderTarget();
 	void CaptureFrameAsync();
+	void CaptureAsync(
+		UTextureRenderTarget2D* RenderTarget,
+		float InGamma,
+		float InExposure,
+		TFunction<void(const TArray<FColor>&, int32, int32)> Callback);
 };

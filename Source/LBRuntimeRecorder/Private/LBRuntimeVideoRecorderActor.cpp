@@ -115,14 +115,14 @@ void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 		PlatformFile.CreateDirectoryTree(*SaveDir);
 	}
 
-	FString FilePath = FPaths::Combine(SaveDir, FileName + TEXT(".mp4"));
+	CurrentVideoFilePath = FPaths::Combine(SaveDir, FileName + TEXT(".mp4"));
 
 
 	EncodeThread = new FLBRFFmpegEncodeThread(
 		CurrentWidth,
 		CurrentHeight,
 		CaptureFPS,
-		FilePath
+		CurrentVideoFilePath
 	);
 
 	EncodeRunnable = FRunnableThread::Create(
@@ -135,7 +135,7 @@ void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 	bIsRecording = true;
 	TimeAccumulator = 0.f;
 
-	UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Start recording at resolution %dx%d,Gamma[%f],Exposure[%f]"), CurrentWidth, CurrentHeight, Gamma, Exposure);
+	UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Start recording at resolution %dx%d,Gamma[%.2f],Exposure[%.2f]."), CurrentWidth, CurrentHeight, Gamma, Exposure);
 }
 
 void ALBRuntimeVideoRecorderActor::StopRecording()
@@ -158,11 +158,13 @@ void ALBRuntimeVideoRecorderActor::StopRecording()
 
 	delete EncodeThread;
 	EncodeThread = nullptr;
+
+	UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Stop recording,video saved in %s."), *CurrentVideoFilePath);
 }
 
 void ALBRuntimeVideoRecorderActor::SceneShot(const FString& FileName)
 {
-	FLBRSimpleAsyncCapture::CaptureAsync(
+	CaptureAsync(
 		RenderTarget,
 		Gamma,
 		Exposure,
@@ -180,6 +182,9 @@ void ALBRuntimeVideoRecorderActor::SceneShot(const FString& FileName)
 
 					IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
 					FFileHelper::SaveArrayToFile(PNGData, *FilePath);
+
+					UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Scene shot finished,image saved in %s."), *FilePath);
+
 				});
 		}
 	);
@@ -246,19 +251,39 @@ void ALBRuntimeVideoRecorderActor::InitRenderTarget()
 	}
 }
 
-void FLBRSimpleAsyncCapture::CaptureAsync(
-	UTextureRenderTarget2D* RenderTarget,
-	float InGamma,
-	float InExposure,
-	TFunction<void(const TArray<FColor>&, int32, int32)> Callback)
+void ALBRuntimeVideoRecorderActor::CaptureFrameAsync()
 {
-	if (!RenderTarget) return;
+	CaptureAsync(
+		RenderTarget,
+		Gamma,
+		Exposure,
+		[this](const TArray<FColor>& Pixels, int32 Width, int32 Height)
+		{
+			FLBRRawFrame Frame;
+			Frame.Width = Width;
+			Frame.Height = Height;
+			Frame.PTS = FrameCounter++;
+			Frame.Pixels = Pixels; // TArray<FColor> 拷贝
+
+
+			if (EncodeThread)
+			{
+				UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Encode frame index [%lld]"), FrameCounter);
+				EncodeThread->PushFrame(MoveTemp(Frame));
+			}
+		}
+	);
+}
+
+void ALBRuntimeVideoRecorderActor::CaptureAsync(UTextureRenderTarget2D* InRenderTarget, float InGamma, float InExposure, TFunction<void(const TArray<FColor>&, int32, int32)> Callback)
+{
+	if (!InRenderTarget) return;
 
 	ENQUEUE_RENDER_COMMAND(LBR_LDR_Capture)(
-		[RenderTarget, InGamma, InExposure, Callback](FRHICommandListImmediate& RHICmdList)
+		[InRenderTarget, InGamma, InExposure, Callback](FRHICommandListImmediate& RHICmdList)
 		{
 			FTextureRenderTargetResource* RTResource =
-				RenderTarget->GetRenderTargetResource();
+				InRenderTarget->GetRenderTargetResource();
 
 			if (!RTResource) return;
 
@@ -355,28 +380,4 @@ void FLBRSimpleAsyncCapture::CaptureAsync(
 			AsyncTask(ENamedThreads::ActualRenderingThread,
 				[Poll]() { Poll(Poll); });
 		});
-}
-
-void ALBRuntimeVideoRecorderActor::CaptureFrameAsync()
-{
-	FLBRSimpleAsyncCapture::CaptureAsync(
-		RenderTarget,
-		Gamma,
-		Exposure,
-		[this](const TArray<FColor>& Pixels, int32 Width, int32 Height)
-		{
-			FLBRRawFrame Frame;
-			Frame.Width = Width;
-			Frame.Height = Height;
-			Frame.PTS = FrameCounter++;
-			Frame.Pixels = Pixels; // TArray<FColor> 拷贝
-
-
-			if (EncodeThread)
-			{
-				UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Encode frame index [%lld]"), FrameCounter);
-				EncodeThread->PushFrame(MoveTemp(Frame));
-			}
-		}
-	);
 }
