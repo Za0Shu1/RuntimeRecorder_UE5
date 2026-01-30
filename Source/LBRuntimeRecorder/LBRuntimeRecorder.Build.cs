@@ -11,7 +11,7 @@ public class LBRuntimeRecorder : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         string ThirdPartyPath = Path.GetFullPath(Path.Combine(ModuleDirectory, "./ThirdParty"));
-        string FFmpegPath = Path.Combine(ThirdPartyPath, "ffmpeg-8.0.1");
+        string FFmpegPath = Path.Combine(ThirdPartyPath, "ffmpeg");
 
         PublicIncludePaths.Add(Path.Combine(FFmpegPath, "include"));
 
