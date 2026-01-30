@@ -73,3 +73,6 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+RuntimeRecorder_UE5/Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/*
+!RuntimeRecorder_UE5/Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/

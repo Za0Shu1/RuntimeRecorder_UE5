@@ -11,7 +11,7 @@ public class LBRuntimeRecorder : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         string ThirdPartyPath = Path.GetFullPath(Path.Combine(ModuleDirectory, "./ThirdParty"));
-        string FFmpegPath = Path.Combine(ThirdPartyPath, "ffmpeg");
+        string FFmpegPath = Path.Combine(ThirdPartyPath, "ffmpeg-8.0.1");
 
         PublicIncludePaths.Add(Path.Combine(FFmpegPath, "include"));
 
@@ -28,7 +28,7 @@ public class LBRuntimeRecorder : ModuleRules
             string BinPath = Path.Combine(FFmpegPath, "bin");
 
 
-            // 运行时DLL
+            // 锟斤拷锟斤拷时DLL
             string[] DynamicLibraries = Directory.GetFiles(BinPath, "*.dll");
 
             foreach (string item in DynamicLibraries)
