@@ -18,22 +18,22 @@ class LBRUNTIMERECORDER_API ALBRuntimeVideoRecorderActor : public AActor
 public:
 	ALBRuntimeVideoRecorderActor();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Video Recorder")
 	USceneCaptureComponent2D* CaptureComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Config")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Video Recorder")
 	UTextureRenderTarget2D* RenderTarget;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "分辨率"))
-	ELBRVideoResolution VideoResolution = ELBRVideoResolution::Resolution_1080pFullHD;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video Recorder", meta = (DisplayName = "分辨率"))
+	ELBRVideoResolution VideoResolution = ELBRVideoResolution::Resolution_720pHD;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "Gamma", ClampMin = "0.1", ClampMax = "5.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video Recorder", meta = (DisplayName = "Gamma", ClampMin = "0.1", ClampMax = "5.0"))
 	float Gamma = 1.2f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "曝光补偿", ClampMin = "0.1", ClampMax = "5.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video Recorder", meta = (DisplayName = "曝光补偿", ClampMin = "0.1", ClampMax = "5.0"))
 	float Exposure = 1.3f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config", meta = (DisplayName = "帧率", ClampMin = "1", ClampMax = "120"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video Recorder", meta = (DisplayName = "帧率", ClampMin = "1", ClampMax = "120"))
 	float CaptureFPS = 30.f;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
