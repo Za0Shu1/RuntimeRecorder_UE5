@@ -74,6 +74,7 @@ Plugins/**/Intermediate/*
 # Cache files for the editor to use
 DerivedDataCache/*
 
+# ffmpeg library
 Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/*
 !Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/
-!Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/.gitkeep
+!Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/README.md
