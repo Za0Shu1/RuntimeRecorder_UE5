@@ -8,3 +8,10 @@ You must download and place FFmpeg files here manually.
     https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
 
 2. Extract the archive and copy the contents into this directory
+
+## Directory
+ffmpeg-8.0.1/
+    ├─ bin/
+    ├─ include/
+    ├─ lib/
+    └─ README.md
