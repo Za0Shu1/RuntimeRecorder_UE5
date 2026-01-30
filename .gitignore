@@ -75,6 +75,6 @@ Plugins/**/Intermediate/*
 DerivedDataCache/*
 
 # ffmpeg library
-Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/*
-!Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/
-!Source/LBRuntimeRecorder/ThirdParty/ffmpeg-8.0.1/README.md
+Source/LBRuntimeRecorder/ThirdParty/ffmpeg/*
+!Source/LBRuntimeRecorder/ThirdParty/ffmpeg
+!Source/LBRuntimeRecorder/ThirdParty/ffmpeg/README.md

@@ -1,9 +1,8 @@
 
-
-# FFmpeg 8.0.1 (ThirdParty Dependency)
+# FFmpeg (ThirdParty Dependency)
 You must download and place FFmpeg files here manually.
 
-## Download FFmpeg 8.0.1
+## Download FFmpeg
 1. Go to:
     https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
 
@@ -11,7 +10,7 @@ You must download and place FFmpeg files here manually.
 
 ## Directory
 ```
-ffmpeg-8.0.1/
+ffmpeg/
 ├─ bin/
 ├─ include/
 ├─ lib/
