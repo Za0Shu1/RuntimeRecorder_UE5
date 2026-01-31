@@ -21,7 +21,8 @@ bool LBSubmixCapture::Initialize()
 		return false;
 	}
 
-	FAudioDeviceHandle AudioDevice = GEngine->GetMainAudioDevice();
+	//FAudioDeviceHandle AudioDevice = GEngine->GetMainAudioDevice();  // AudioData的数据可能全是0.0
+	FAudioDeviceHandle AudioDevice = GEngine->GetActiveAudioDevice();
 	if (!AudioDevice)
 	{
 		UE_LOG(LogLBSubmixCapture, Warning, TEXT("No audio device"));
@@ -50,7 +51,8 @@ bool LBSubmixCapture::Uninitialize()
 
 	if (GEngine)
 	{
-		FAudioDeviceHandle AudioDevice = GEngine->GetMainAudioDevice();
+		//FAudioDeviceHandle AudioDevice = GEngine->GetMainAudioDevice();
+		FAudioDeviceHandle AudioDevice = GEngine->GetActiveAudioDevice();
 		if (AudioDevice)
 		{
 			AudioDevice->UnregisterSubmixBufferListener(AsShared(), AudioDevice->GetMainSubmixObject());
@@ -70,28 +72,6 @@ void LBSubmixCapture::OnNewSubmixBuffer(const USoundSubmix* OwningSubmix, float*
 	{
 		return;
 	}
-
-	// 临时生成测试数据
-	float Frequency = 440.0f; // A4 音
-	for (int32 i = 0; i < NumSamples; ++i)
-	{
-		AudioData[i] = FMath::Sin(2.0f * PI * Frequency * (AudioSampleCursor + i) / SampleRate);
-	}
-
-	// @TODO: 这里拿到的AudioData数据是0，静音
-	float MaxAbs = 0.0f;
-	for (int32 i = 0; i < NumSamples; ++i)
-	{
-		MaxAbs = FMath::Max(MaxAbs, FMath::Abs(AudioData[i]));
-	}
-
-	UE_LOG(LogLBSubmixCapture, Warning,
-		TEXT("[SubmixDebug] NumSamples=%d Channels=%d MaxAbs=%f First=%f"),
-		NumSamples,
-		NumChannels,
-		MaxAbs,
-		AudioData[0]
-	);
 
 	CurrentSampleRate = SampleRate;
 	CurrentNumChannels = NumChannels;

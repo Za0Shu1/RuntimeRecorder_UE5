@@ -312,12 +312,6 @@ void FLBRFFmpegEncodeThread::EncodeOneAudioFrame(const FLBRAudioFrame& InAudio)
         return;
     }
 
-    UE_LOG(LogFFmpegEncodeThread, Warning,
-        TEXT("[AudioDebug] samples=%d, first=%f"),
-        InAudio.Samples.Num(),
-        InAudio.Samples.Num() > 0 ? InAudio.Samples[0] : 0.f
-    );
-
     // 1️ 先把 UE 给的 samples 全部攒起来
     PendingAudioSamples.Append(InAudio.Samples);
 

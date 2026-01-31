@@ -138,6 +138,22 @@ void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 	AudioCapture->OnAudioFrame.BindLambda(
 		[this](FLBRAudioFrame&& AudioFrame)
 		{
+			// 打印音频帧信息
+			float MaxSample = 0.f;
+			for (float s : AudioFrame.Samples)
+			{
+				MaxSample = FMath::Max(MaxSample, FMath::Abs(s));
+			}
+
+			UE_LOG(LogLBRuntimeVideoRecorder, Log,
+				TEXT("Audio frame PTS=%lld NumSamples=%d NumChannels=%d SampleRate=%d MaxSample=%f"),
+				AudioFrame.PTS,
+				AudioFrame.Samples.Num(),
+				AudioFrame.NumChannels,
+				AudioFrame.SampleRate,
+				MaxSample
+			);
+
 			if (EncodeThread)
 			{
 				EncodeThread->PushAudioFrame(MoveTemp(AudioFrame));
@@ -288,7 +304,7 @@ void ALBRuntimeVideoRecorderActor::CaptureFrameAsync()
 
 			if (EncodeThread)
 			{
-				UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Encode frame index [%lld]"), FrameCounter);
+				UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Video frame PTS=%lld Width=%d Height=%d"), Frame.PTS, Frame.Width, Frame.Height);
 				EncodeThread->PushFrame(MoveTemp(Frame));
 			}
 		}
