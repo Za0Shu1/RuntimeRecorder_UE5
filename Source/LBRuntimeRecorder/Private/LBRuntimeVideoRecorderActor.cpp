@@ -18,8 +18,8 @@ ALBRuntimeVideoRecorderActor::ALBRuntimeVideoRecorderActor()
 	CaptureComponent->SetupAttachment(RootComponent);
 
 	// 默认不开启实时捕捉
-	CaptureComponent->bCaptureEveryFrame = true;
-	CaptureComponent->bCaptureOnMovement = true;
+	CaptureComponent->bCaptureEveryFrame = false;
+	CaptureComponent->bCaptureOnMovement = false;
 
 	// 设置CaptureSource为HDR模式 (保留更多暗部细节)
 	CaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalToneCurveHDR;
@@ -109,6 +109,9 @@ void ALBRuntimeVideoRecorderActor::StartRecording(const FString& FileName)
 	bIsRecording = true;
 	FrameInterval = 1.f / CaptureFPS;
 
+	CaptureComponent->bCaptureEveryFrame = true;
+	CaptureComponent->bCaptureOnMovement = true;
+
 	const FString SaveDir = GetVideoStoragePath();
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PlatformFile.DirectoryExists(*SaveDir))
@@ -174,6 +177,9 @@ void ALBRuntimeVideoRecorderActor::StopRecording()
 
 	bIsRecording = false;
 
+	CaptureComponent->bCaptureEveryFrame = false;
+	CaptureComponent->bCaptureOnMovement = false;
+
 	if (!EncodeRunnable || !EncodeThread)
 		return;
 
@@ -200,31 +206,52 @@ void ALBRuntimeVideoRecorderActor::StopRecording()
 
 void ALBRuntimeVideoRecorderActor::SceneShot(const FString& FileName)
 {
-	CaptureAsync(
-		RenderTarget,
-		Gamma,
-		Exposure,
-		[this, FileName](const TArray<FColor>& Pixels, int32 Width, int32 Height)
-		{
-			if (Pixels.Num() == 0 || Width <= 0 || Height <= 0)
-				return;
+	// 如果没有开启录制，则临时开启捕捉
+	if (!bIsRecording)
+	{
+		CaptureComponent->bCaptureEveryFrame = true;
+		CaptureComponent->bCaptureOnMovement = true;
 
-			FString FilePath = FPaths::Combine(GetSceneShotStoragePath(), FileName + TEXT(".png"));
+		// 延迟0.5秒后执行截图（给曝光和光照稳定时间）
+		FTimerHandle CaptureTimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+			CaptureTimerHandle,
+			[this, FileName, CaptureTimerHandle]() mutable
+			{
+				ExecuteSceneShot(FileName);
 
-			Async(EAsyncExecution::ThreadPool, [Pixels, Width, Height, FilePath]()
-				{
-					TArray64<uint8> PNGData;
-					FImageUtils::PNGCompressImageArray(Width, Height, Pixels, PNGData);
+				// 再延迟0.5秒后关闭捕捉（确保截图完成）
+				FTimerHandle RestoreTimerHandle;
+				GetWorld()->GetTimerManager().SetTimer(
+					RestoreTimerHandle,
+					[this, CaptureTimerHandle, RestoreTimerHandle]() mutable
+					{
+						if (!bIsRecording)
+						{
+							CaptureComponent->bCaptureEveryFrame = false;
+							CaptureComponent->bCaptureOnMovement = false;
+						}
 
-					IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
-					FFileHelper::SaveArrayToFile(PNGData, *FilePath);
-
-					UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Scene shot finished,image saved in %s."), *FilePath);
-
-				});
-		}
-	);
+						// 清理定时器
+						GetWorld()->GetTimerManager().ClearTimer(CaptureTimerHandle);
+						GetWorld()->GetTimerManager().ClearTimer(RestoreTimerHandle);
+					},
+					0.5f,  // 0.5秒延迟
+					false  // 不循环
+				);
+			},
+			0.5f,  // 0.5秒延迟
+			false  // 不循环
+		);
+	}
+	else
+	{
+		// 如果已经在录制，直接截图
+		ExecuteSceneShot(FileName);
+	}
 }
+
+// 如果需要优化，可以使用成员变量保存定时器句柄
 
 FString ALBRuntimeVideoRecorderActor::GetDateString(FString Format)
 {
@@ -416,4 +443,32 @@ void ALBRuntimeVideoRecorderActor::CaptureAsync(UTextureRenderTarget2D* InRender
 			AsyncTask(ENamedThreads::ActualRenderingThread,
 				[Poll]() { Poll(Poll); });
 		});
+}
+
+void ALBRuntimeVideoRecorderActor::ExecuteSceneShot(const FString& FileName)
+{
+	CaptureAsync(
+		RenderTarget,
+		Gamma,
+		Exposure,
+		[this, FileName](const TArray<FColor>& Pixels, int32 Width, int32 Height)
+		{
+			if (Pixels.Num() == 0 || Width <= 0 || Height <= 0)
+				return;
+
+			FString FilePath = FPaths::Combine(GetSceneShotStoragePath(), FileName + TEXT(".png"));
+
+			Async(EAsyncExecution::ThreadPool, [Pixels, Width, Height, FilePath]()
+				{
+					TArray64<uint8> PNGData;
+					FImageUtils::PNGCompressImageArray(Width, Height, Pixels, PNGData);
+
+					IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
+					FFileHelper::SaveArrayToFile(PNGData, *FilePath);
+
+					UE_LOG(LogLBRuntimeVideoRecorder, Log, TEXT("Scene shot finished,image saved in %s."), *FilePath);
+
+				});
+		}
+	);
 }

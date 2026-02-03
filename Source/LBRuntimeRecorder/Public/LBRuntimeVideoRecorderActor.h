@@ -102,4 +102,5 @@ private:
 		float InGamma,
 		float InExposure,
 		TFunction<void(const TArray<FColor>&, int32, int32)> Callback);
+	void ExecuteSceneShot(const FString& FileName);
 };
